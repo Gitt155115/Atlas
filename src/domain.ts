@@ -80,7 +80,7 @@ export const createId = () => globalThis.crypto?.randomUUID?.() ?? `atlas-${Date
 export function recommendSessionsPerWeek(targets: PerformanceTarget[], availableDays: number[]) {
   const hasStrength = targets.some((target) => target.category === 'strength');
   const hasRunning = targets.some((target) => target.category === 'running');
-  const startingPoint = hasStrength && hasRunning ? 5 : hasStrength || hasRunning ? 3 : 0;
+  const startingPoint = hasStrength && hasRunning ? 4 : hasStrength || hasRunning ? 3 : 0;
   return Math.min(startingPoint, availableDays.length);
 }
 
@@ -97,12 +97,13 @@ export function createPlanSuggestion(goal: TrainingGoal): PlannedSession[] {
   const strengthSessions = Array.from({ length: strengthCount }, (_, index) => {
     const target = strengthTargets[index % strengthTargets.length];
     const lift = liftLabel(target.metric);
+    const otherTargets = strengthTargets.filter((item) => item.id !== target.id).map((item) => `${liftLabel(item.metric)} ${item.targetKg} kg`);
     const sessionName = ['A', 'B', 'C'][index % 3];
     return {
       title: `Styrka ${sessionName} · ${lift}`,
       type: 'strength' as const,
       durationMinutes: 60,
-      focus: `Prioriterat lyft: ${lift}, mål ${target.targetKg} kg. Övningar, vikter och progression behöver anpassas efter ditt nuläge.`,
+      focus: `Prioriterat lyft: ${lift}, mål ${target.targetKg} kg.${otherTargets.length ? ` Övriga styrkemål: ${otherTargets.join(' · ')}.` : ''} Övningar, vikter och progression behöver anpassas efter ditt nuläge.`,
     };
   });
   const runNames = runCount === 1 ? ['Löpning'] : runCount === 2 ? ['Kvalitetspass', 'Långpass'] : ['Intervaller / kvalitet', 'Lugn distans', 'Långpass', 'Lugn distans'];
