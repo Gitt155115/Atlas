@@ -1,21 +1,25 @@
-# Atlas datamodell v1
+# Atlas datamodell v2
 
-MVP: `src/domain.ts` är den exekverbara TypeScript-definitionen; detta dokument beskriver gränserna inför nästa steg.
+`src/domain.ts` är den exekverbara TypeScript-definitionen. Version 2 lägger till mätbara mål och träningsramar och migrerar den lokalt sparade version 1-datan.
 
 ## Aktuella objekt
 
-- `TrainingGoal`: användarens mål, beskrivning och veckofrekvens. Ändras endast genom användarens uttryckliga formuläråtgärd.
-- `PlannedSession`: återkommande veckostruktur. Att planera ett pass skapar inte en genomförd aktivitet.
+- `TrainingGoal`: användarens mål, tillgängliga träningsdagar, eget valt antal pass och Atlas grova frekvensförslag.
+- `PerformanceTarget`: antingen ett styrkelyft med valfritt nuläge och målvikt, eller en löpdistans med valfritt nuläge och måltid. Måldatum är valfritt.
+- `PlannedSession`: återkommande veckostruktur med typ, dag, längd, fokus och valfri distans. Att planera ett pass skapar inte en genomförd aktivitet.
 - `Activity`: kanonisk post för något som genomförts, med tidsstämpel, träningstyp, varaktighet, ansträngning och valfri distans/anteckning.
-- `AtlasData`: versionerad lokal datakapsel för backup och framtida migrering.
+- `AtlasData`: versionsmärkt lokal datakapsel för backup och migrering.
+
+Frekvensförslaget är i nuläget en enkel regel: 3 pass för antingen styrka eller löpning, 5 för båda, begränsat av valda dagar. Det är inte ett individuellt träningsråd. För en mer välgrundad periodisering behöver appen bland annat nuläge, träningsvana, återhämtning och måldatum.
 
 ## Grundregler
 
-1. AI får aldrig ändra `TrainingGoal` eller den aktiva strategin. Ändring kräver ett aktivt användarval.
+1. Träningsmål ändras endast genom användarens uttryckliga val.
 2. Planerade pass och genomförda aktiviteter är olika typer och sparas separat.
 3. Importerade aktiviteter får inte ändra mål eller plan.
 4. Externa aktiviteter behåller källnamn och provider-id när det finns; upprepade importer ska dedupliceras på källa + provider-id.
 5. Integrationsbehörigheter och åtkomsttoken lagras inte i exportfilen `AtlasData`.
+6. Migration från v1 bevarar befintlig plan och träningslogg. Äldre allmänna mål migreras som tomma mätbara mål, så användaren får ange sina nya målvärden själv.
 
 ## Integrationsgräns
 
