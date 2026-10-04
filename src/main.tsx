@@ -257,11 +257,11 @@ function Goal({ data, onSave, onGeneratePlan, onExport, onImport }: { data: Atla
 }
 
 function TargetCard({ target, onChange, onRemove }: { target: PerformanceTarget; onChange: (target: PerformanceTarget) => void; onRemove: () => void }) {
-  const [currentText, setCurrentText] = useState(target.category === 'strength' ? target.currentKg?.toString() ?? '' : secondsToClock(target.currentSeconds));
-  const [targetText, setTargetText] = useState(target.category === 'strength' ? String(target.targetKg || '') : secondsToClock(target.targetSeconds));
+  const [currentText, setCurrentText] = useState(target.category === 'strength' ? target.currentKg?.toString() ?? '' : '');
+  const [targetText, setTargetText] = useState(target.category === 'strength' ? String(target.targetKg || '') : '');
   useEffect(() => {
-    setCurrentText(target.category === 'strength' ? target.currentKg?.toString() ?? '' : secondsToClock(target.currentSeconds));
-    setTargetText(target.category === 'strength' ? String(target.targetKg || '') : secondsToClock(target.targetSeconds));
+    setCurrentText(target.category === 'strength' ? target.currentKg?.toString() ?? '' : '');
+    setTargetText(target.category === 'strength' ? String(target.targetKg || '') : '');
   }, [target.id]);
   const title = target.category === 'strength' ? `${liftLabel(target.metric)} · 1RM` : `${runningEvent(target.metric).label} · tid`;
   const updateDate = (targetDate: string) => onChange({ ...target, targetDate: targetDate || undefined } as PerformanceTarget);
@@ -272,20 +272,38 @@ function TargetCard({ target, onChange, onRemove }: { target: PerformanceTarget;
         <label>Nuläge (kg) <span className="optional">(valfritt)</span><input type="number" min={0} step="0.5" inputMode="decimal" value={currentText} onChange={(event) => { const value = event.target.value; setCurrentText(value); onChange({ ...target, currentKg: value ? Number(value) : undefined }); }}/></label>
         <label>Mål (kg)<input type="number" min={1} step="0.5" inputMode="decimal" value={targetText} onChange={(event) => { const value = event.target.value; setTargetText(value); onChange({ ...target, targetKg: Number(value) || 0 }); }}/></label>
       </> : <>
-        <label>Nuläge (min:sek) <span className="optional">(valfritt)</span><input type="text" inputMode="numeric" placeholder="55:00" value={currentText} onChange={(event) => { const value = event.target.value; setCurrentText(value); onChange({ ...target, currentSeconds: clockToSeconds(value) ?? undefined }); }}/></label>
-        <label>Måltid (min:sek)<input type="text" inputMode="numeric" placeholder="45:00" value={targetText} onChange={(event) => { const value = event.target.value; setTargetText(value); onChange({ ...target, targetSeconds: clockToSeconds(value) ?? 0 }); }}/></label>
+        <TimePicker label="Nuläge" optional seconds={target.currentSeconds} onChange={(currentSeconds) => onChange({ ...target, currentSeconds })}/>
+        <TimePicker label="Måltid" seconds={target.targetSeconds} onChange={(targetSeconds) => onChange({ ...target, targetSeconds: targetSeconds ?? 0 })}/>
       </>}
       <label>Måldatum <span className="optional">(valfritt)</span><input type="date" value={target.targetDate ?? ''} onChange={(event) => updateDate(event.target.value)}/></label>
     </div>
   </article>;
 }
 
-function clockToSeconds(value: string) {
-  const match = value.trim().match(/^(\d{1,3}):(\d{1,2})$/);
-  if (!match || Number(match[2]) > 59) return undefined;
-  return Number(match[1]) * 60 + Number(match[2]);
+function TimePicker({ label, seconds, optional = false, onChange }: { label: string; seconds?: number; optional?: boolean; onChange: (seconds: number | undefined) => void }) {
+  const [minutes, setMinutes] = useState(seconds === undefined ? '' : String(Math.floor(seconds / 60)));
+  const [remainingSeconds, setRemainingSeconds] = useState(seconds === undefined ? '' : String(seconds % 60).padStart(2, '0'));
+  useEffect(() => {
+    setMinutes(seconds === undefined ? '' : String(Math.floor(seconds / 60)));
+    setRemainingSeconds(seconds === undefined ? '' : String(seconds % 60).padStart(2, '0'));
+  }, [seconds]);
+
+  const update = (nextMinutes: string, nextSeconds: string) => {
+    setMinutes(nextMinutes);
+    setRemainingSeconds(nextSeconds);
+    onChange(nextMinutes !== '' && nextSeconds !== '' ? Number(nextMinutes) * 60 + Number(nextSeconds) : undefined);
+  };
+
+  return <label className="time-picker">{label} {optional && <span className="optional">(valfritt)</span>}<div className="time-select-pair">
+    <select aria-label={`${label}, minuter`} value={minutes} onChange={(event) => update(event.target.value, remainingSeconds || '00')}>
+      <option value="">min</option>{Array.from({ length: 600 }, (_, minute) => <option key={minute} value={minute}>{minute} min</option>)}
+    </select>
+    <span aria-hidden="true">:</span>
+    <select aria-label={`${label}, sekunder`} value={remainingSeconds} onChange={(event) => update(minutes, event.target.value)}>
+      <option value="">sek</option>{Array.from({ length: 60 }, (_, second) => <option key={second} value={String(second).padStart(2, '0')}>{String(second).padStart(2, '0')} sek</option>)}
+    </select>
+  </div></label>;
 }
-function secondsToClock(value?: number) { return value ? `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}` : ''; }
 
 function ActivityModal({ draft, setDraft, onSubmit, onClose }: { draft: ActivityDraft; setDraft: (draft: ActivityDraft | null) => void; onSubmit: (event: FormEvent) => void; onClose: () => void }) {
   const change = <K extends keyof ActivityDraft>(key: K, value: ActivityDraft[K]) => setDraft({ ...draft, [key]: value });
