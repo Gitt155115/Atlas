@@ -85,23 +85,39 @@ export function recommendSessionsPerWeek(targets: PerformanceTarget[], available
 }
 
 export function createPlanSuggestion(goal: TrainingGoal): PlannedSession[] {
-  const hasStrength = goal.targets.some((target) => target.category === 'strength');
-  const hasRunning = goal.targets.some((target) => target.category === 'running');
+  const strengthTargets = goal.targets.filter((target): target is Extract<PerformanceTarget, { category: 'strength' }> => target.category === 'strength');
+  const runningTargets = goal.targets.filter((target): target is Extract<PerformanceTarget, { category: 'running' }> => target.category === 'running');
+  const hasStrength = strengthTargets.length > 0;
+  const hasRunning = runningTargets.length > 0;
   const count = Math.max(0, Math.min(goal.sessionsPerWeek, 7));
   if (!count || (!hasStrength && !hasRunning)) return [];
 
   const strengthCount = hasStrength && hasRunning ? Math.min(Math.ceil(count / 2), 2) : hasStrength ? count : 0;
   const runCount = count - strengthCount;
-  const strengthSessions = Array.from({ length: strengthCount }, (_, index) => ({
-    title: ['Styrka A', 'Styrka B'][index % 2], type: 'strength' as const,
-    durationMinutes: 60, focus: index % 2 === 0 ? 'Huvudlyft och kompletterande styrka' : 'Teknik, volym och kompletterande styrka',
-  }));
+  const strengthSessions = Array.from({ length: strengthCount }, (_, index) => {
+    const target = strengthTargets[index % strengthTargets.length];
+    const lift = liftLabel(target.metric);
+    const sessionName = ['A', 'B', 'C'][index % 3];
+    return {
+      title: `Styrka ${sessionName} · ${lift}`,
+      type: 'strength' as const,
+      durationMinutes: 60,
+      focus: `Prioriterat lyft: ${lift}, mål ${target.targetKg} kg. Övningar, vikter och progression behöver anpassas efter ditt nuläge.`,
+    };
+  });
   const runNames = runCount === 1 ? ['Löpning'] : runCount === 2 ? ['Kvalitetspass', 'Långpass'] : ['Intervaller / kvalitet', 'Lugn distans', 'Långpass', 'Lugn distans'];
-  const runSessions = Array.from({ length: runCount }, (_, index) => ({
-    title: runNames[index % runNames.length], type: 'running' as const,
-    durationMinutes: index === runCount - 1 && runCount > 1 ? 60 : 45,
-    focus: 'Första planutkastet · justeras efter nuläge och måldatum',
-  }));
+  const runSessions = Array.from({ length: runCount }, (_, index) => {
+    const target = runningTargets[index % runningTargets.length];
+    const event = runningEvent(target.metric);
+    const goalTime = `${Math.floor(target.targetSeconds / 60)}:${String(target.targetSeconds % 60).padStart(2, '0')}`;
+    const isLongRun = index === runCount - 1 && runCount > 1;
+    return {
+      title: `${runNames[index % runNames.length]} · ${event.label}`,
+      type: 'running' as const,
+      durationMinutes: isLongRun ? 60 : 45,
+      focus: `Målriktning: ${event.label} på ${goalTime}. Träningsfart och progression behöver anpassas efter ditt nuläge.`,
+    };
+  });
   const sessions = [...strengthSessions, ...runSessions];
   const days = [...new Set(goal.availableDays)].filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort((a, b) => a - b);
   const usableDays = days.length >= count ? days : Array.from({ length: 7 }, (_, day) => day);
