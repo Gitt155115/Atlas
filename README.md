@@ -21,6 +21,8 @@ Kör `npm run typecheck` för strikt TypeScript-kontroll.
 - Ett första veckoförslag kan skapas utifrån målen och redigeras pass för pass. Det är en grundstruktur, inte en individuell periodiserad plan.
 - Målvärden och veckofrekvens kan ändras av användaren.
 - Veckoplanens pass kan läggas till, redigeras och tas bort.
+- Styrkepass kan loggas med övningar, set, repetitioner, vikt och valfri RPE per set.
+- Löppass kan loggas med distans och exakt tid; snittempo räknas ut automatiskt.
 - Genomförda pass registreras i en separat historik.
 - Pass kan filtreras och summeras i loggen.
 - Data sparas i webbläsarens lokala lagring.
