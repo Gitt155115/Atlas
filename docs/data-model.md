@@ -10,7 +10,7 @@
 - `Activity`: kanonisk post för något som genomförts, med tidsstämpel, träningstyp, varaktighet, ansträngning och valfri distans/anteckning.
 - `AtlasData`: versionsmärkt lokal datakapsel för backup och migrering.
 
-Frekvensförslaget är i nuläget en enkel regel: 3 pass för antingen styrka eller löpning, 5 för båda, begränsat av valda dagar. Det är inte ett individuellt träningsråd. För en mer välgrundad periodisering behöver appen bland annat nuläge, träningsvana, återhämtning och måldatum.
+Frekvensförslaget är i nuläget en enkel regel: 3 pass för antingen styrka eller löpning, 4 för båda, begränsat av valda dagar. Det är inte ett individuellt träningsråd. För en mer välgrundad periodisering behöver appen bland annat nuläge, träningsvana, återhämtning och måldatum.
 
 ## Grundregler
 
