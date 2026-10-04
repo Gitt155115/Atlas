@@ -1,4 +1,4 @@
-import { type Activity, type AtlasData, createDefaultData, isAtlasData } from './domain';
+import { type Activity, type AtlasData, createDefaultData, migrateAtlasData } from './domain';
 
 const STORAGE_KEY = 'atlas.data.v1';
 let memoryFallback: AtlasData | null = null;
@@ -15,7 +15,8 @@ export const localTrainingRepository: TrainingRepository = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed: unknown = JSON.parse(raw);
-        if (isAtlasData(parsed)) return parsed;
+        const migrated = migrateAtlasData(parsed);
+        if (migrated) return migrated;
       }
     } catch {
       // A damaged or unavailable local record should not prevent the app from opening.
@@ -54,6 +55,7 @@ export function downloadBackup(data: AtlasData) {
 
 export async function readBackup(file: File): Promise<AtlasData> {
   const value: unknown = JSON.parse(await file.text());
-  if (!isAtlasData(value)) throw new Error('Filen har inte ett Atlas-backupformat som stöds.');
-  return value;
+  const migrated = migrateAtlasData(value);
+  if (!migrated) throw new Error('Filen har inte ett Atlas-backupformat som stöds.');
+  return migrated;
 }
