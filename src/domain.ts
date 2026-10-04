@@ -7,6 +7,9 @@ export type PerformanceTarget =
   | { id: string; category: 'strength'; metric: StrengthLift; currentKg?: number; targetKg: number; targetDate?: string }
   | { id: string; category: 'running'; metric: RunningEvent; currentSeconds?: number; targetSeconds: number; targetDate?: string };
 
+export type ExerciseSet = { reps: number; loadKg?: number; rpe?: number };
+export type ExerciseLog = { id: string; name: string; sets: ExerciseSet[] };
+
 /** Canonical Atlas activity shape. Wearable adapters should map into this shape. */
 export type Activity = {
   id: string;
@@ -16,6 +19,8 @@ export type Activity = {
   durationMinutes: number;
   effort?: number;
   distanceKm?: number;
+  runTimeSeconds?: number;
+  exercises?: ExerciseLog[];
   notes?: string;
   source: ActivitySource;
   externalId?: string;
@@ -161,6 +166,16 @@ function isPerformanceTarget(value: unknown): value is PerformanceTarget {
   return false;
 }
 
+function isExerciseLog(value: unknown): value is ExerciseLog {
+  if (!value || typeof value !== 'object') return false;
+  const exercise = value as Partial<ExerciseLog>;
+  return typeof exercise.id === 'string' && typeof exercise.name === 'string' && exercise.name.trim().length > 0
+    && Array.isArray(exercise.sets) && exercise.sets.length > 0
+    && exercise.sets.every((set) => !!set && Number.isInteger(set.reps) && set.reps > 0
+      && (set.loadKg === undefined || (Number.isFinite(set.loadKg) && set.loadKg >= 0))
+      && (set.rpe === undefined || (Number.isInteger(set.rpe) && set.rpe >= 1 && set.rpe <= 10)));
+}
+
 /** Converts the v1 local data and backups without discarding the user's existing log. */
 export function migrateAtlasData(value: unknown): AtlasData | null {
   if (!value || typeof value !== 'object') return null;
@@ -206,6 +221,8 @@ export function migrateAtlasData(value: unknown): AtlasData | null {
     && ['manual', 'apple_health', 'health_connect', 'garmin', 'strava', 'other'].includes(item.source)
     && (item.effort === undefined || (Number.isInteger(item.effort) && item.effort >= 1 && item.effort <= 10))
     && (item.distanceKm === undefined || (Number.isFinite(item.distanceKm) && item.distanceKm >= 0))
+    && (item.runTimeSeconds === undefined || (Number.isInteger(item.runTimeSeconds) && item.runTimeSeconds > 0))
+    && (item.exercises === undefined || (Array.isArray(item.exercises) && item.exercises.every(isExerciseLog)))
     && (item.notes === undefined || typeof item.notes === 'string'));
   return validPlan && validActivities ? current as AtlasData : null;
 }
