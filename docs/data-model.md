@@ -7,10 +7,12 @@
 - `TrainingGoal`: användarens mål, tillgängliga träningsdagar, eget valt antal pass och Atlas grova frekvensförslag.
 - `PerformanceTarget`: antingen ett styrkelyft med valfritt nuläge och målvikt, eller en löpdistans med valfritt nuläge och måltid. Måldatum är valfritt.
 - `PlannedSession`: återkommande veckostruktur med typ, dag, längd, fokus och valfri distans. Att planera ett pass skapar inte en genomförd aktivitet.
-- `Activity`: kanonisk post för något som genomförts, med tidsstämpel, träningstyp, varaktighet, ansträngning och valfri distans/anteckning.
+- `Activity`: kanonisk post för något som genomförts, med tidsstämpel, träningstyp, varaktighet, ansträngning och valfri distans/anteckning. Styrkepass kan dessutom innehålla övningar med set, repetitioner, vikt och RPE. Löppass kan innehålla exakt tid i sekunder; tempo räknas fram från tid och distans.
 - `AtlasData`: versionsmärkt lokal datakapsel för backup och migrering.
 
 Frekvensförslaget är i nuläget en enkel regel: 3 pass för antingen styrka eller löpning, 4 för båda, begränsat av valda dagar. Det är inte ett individuellt träningsråd. För en mer välgrundad periodisering behöver appen bland annat nuläge, träningsvana, återhämtning och måldatum.
+
+De nya fälten för övningar och exakt löptid är valfria i datamodellen. Därför kan äldre säkerhetskopior och träningsloggar utan dessa uppgifter fortsätta läsas utan att någon historik behöver byggas om.
 
 ## Grundregler
 
