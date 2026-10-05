@@ -2,15 +2,27 @@ import React, { type FormEvent, useEffect, useMemo, useRef, useState } from 'rea
 import { createRoot } from 'react-dom/client';
 import { Activity as ActivityIcon, ArrowDownToLine, ArrowUpFromLine, CalendarDays, Check, ChevronLeft, ChevronRight, Dumbbell, Edit3, Flag, History, Plus, Route, ShieldCheck, Trash2, X, Zap } from 'lucide-react';
 import { localTrainingRepository, downloadBackup, readBackup } from './data';
-import { ACTIVITY_TYPES, RUNNING_EVENTS, STRENGTH_LIFTS, createPlanSuggestion, recommendSessionsPerWeek, type Activity, type ActivityDraft, type ActivityType, type AtlasData, createId, type PerformanceTarget, type PlannedSession, type RunningEvent, type StrengthLift, type TrainingGoal, typeLabel, liftLabel, runningEvent } from './domain';
+import { ACTIVITY_TYPES, RUNNING_EVENTS, STRENGTH_LIFTS, createPlanSuggestion, recommendSessionsPerWeek, type Activity, type ActivityDraft, type ActivityType, type AtlasData, createId, type ExerciseLog, type PerformanceTarget, type PlannedSession, type RunningEvent, type StrengthLift, type TrainingGoal, typeLabel, liftLabel, runningEvent } from './domain';
 import './styles.css';
 
 type Tab = 'today' | 'plan' | 'log' | 'goal';
 const weekDays = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
-const emptyDraft = (session?: PlannedSession): ActivityDraft => ({
-  title: session?.title ?? '', type: session?.type ?? 'strength', durationMinutes: session?.durationMinutes ?? 45,
-  effort: 6, date: localDate(), notes: '',
-});
+const emptyDraft = (session?: PlannedSession): ActivityDraft => {
+  const type = session?.type ?? 'strength';
+  return {
+    title: session?.title ?? '', type, durationMinutes: session?.durationMinutes ?? 45,
+    effort: 6, distanceKm: session?.distanceKm, date: localDate(), notes: '',
+    exercises: type === 'strength' ? [{ id: createId(), name: '', sets: [{ reps: 0 }] }] : undefined,
+  };
+};
+
+function formatElapsedTime(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+function formatRunningPace(seconds: number, distanceKm: number) {
+  const paceSeconds = Math.round(seconds / distanceKm);
+  return `${Math.floor(paceSeconds / 60)}:${String(paceSeconds % 60).padStart(2, '0')} min/km`;
+}
 
 function localDate(date = new Date()) {
   const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0');
@@ -53,8 +65,15 @@ function App() {
   const sortedActivities = useMemo(() => [...data.activities].sort((a, b) => b.startedAt.localeCompare(a.startedAt)), [data.activities]);
   const addActivity = (event: FormEvent) => {
     event.preventDefault(); if (!draft?.title.trim()) return;
+    if (draft.type === 'running' && (!(draft.distanceKm && draft.distanceKm > 0) || !(draft.runTimeSeconds && draft.runTimeSeconds > 0))) {
+      setNotice('Fyll i både distans och tid för löppasset.'); return;
+    }
+    if (draft.type === 'strength' && (!draft.exercises?.length || draft.exercises.some((exercise) => !exercise.name.trim() || !exercise.sets.length || exercise.sets.some((set) => !Number.isInteger(set.reps) || set.reps < 1)))) {
+      setNotice('Lägg till minst en övning och fyll i repetitioner för varje set.'); return;
+    }
     const { date, ...details } = draft;
-    const activity: Activity = { ...details, id: createId(), startedAt: new Date(`${date}T12:00:00`).toISOString(), source: 'manual' };
+    const durationMinutes = draft.type === 'running' && draft.runTimeSeconds ? Math.max(1, Math.round(draft.runTimeSeconds / 60)) : draft.durationMinutes;
+    const activity: Activity = { ...details, durationMinutes, id: createId(), startedAt: new Date(`${date}T12:00:00`).toISOString(), source: 'manual' };
     setData((previous) => ({ ...previous, activities: [activity, ...previous.activities] }));
     setDraft(null); setNotice('Passet sparades i träningsloggen.');
   };
@@ -174,7 +193,14 @@ function Log({ activities, onAdd, onDelete }: { activities: Activity[]; onAdd: (
     <div className="eyebrow">GENOMFÖRD TRÄNING</div><h1>Din träningslogg.</h1>
     <div className="log-summary"><div><strong>{visible.length}</strong><span>pass registrerade</span></div><div><strong>{minutes}</strong><span>minuter totalt</span></div><button className="round-add" onClick={onAdd} aria-label="Lägg till pass"><Plus size={20}/></button></div>
     <div className="filters"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>Alla</button>{ACTIVITY_TYPES.map((item) => <button key={item.value} className={filter === item.value ? 'selected' : ''} onClick={() => setFilter(item.value)}>{item.label}</button>)}</div>
-    <div className="activity-list">{visible.map((item) => <article className="activity-row" key={item.id}><div className={`activity-icon type-${item.type}`}>{item.type === 'strength' ? <Dumbbell size={17}/> : item.type === 'running' ? <Route size={17}/> : <ActivityIcon size={17}/>}</div><div className="activity-main"><div className="activity-meta">{formatDate(item.startedAt.slice(0, 10), { day: 'numeric', month: 'long', year: 'numeric' })} · {typeLabel(item.type)}</div><strong>{item.title}</strong><span>{item.durationMinutes} min{item.effort ? ` · Ansträngning ${item.effort}/10` : ''}{item.distanceKm ? ` · ${item.distanceKm} km` : ''}</span>{item.notes && <p>{item.notes}</p>}</div><button className="delete-action" aria-label={`Ta bort ${item.title}`} onClick={() => onDelete(item.id)}><Trash2 size={16}/></button></article>)}{visible.length === 0 && <div className="empty-card"><History size={22}/><b>Inga pass i loggen ännu</b><span>Registrera ett pass när du tränat. Planen ligger kvar separat.</span><button className="button-dark" onClick={onAdd}><Plus size={15}/> Lägg till pass</button></div>}</div>
+    <div className="activity-list">{visible.map((item) => <article className="activity-row" key={item.id}>
+      <div className={`activity-icon type-${item.type}`}>{item.type === 'strength' ? <Dumbbell size={17}/> : item.type === 'running' ? <Route size={17}/> : <ActivityIcon size={17}/>}</div>
+      <div className="activity-main"><div className="activity-meta">{formatDate(item.startedAt.slice(0, 10), { day: 'numeric', month: 'long', year: 'numeric' })} · {typeLabel(item.type)}</div><strong>{item.title}</strong>
+        <span>{item.type === 'running' && item.runTimeSeconds ? formatElapsedTime(item.runTimeSeconds) : `${item.durationMinutes} min`}{item.effort ? ` · Ansträngning ${item.effort}/10` : ''}{item.distanceKm ? ` · ${item.distanceKm} km` : ''}{item.type === 'running' && item.runTimeSeconds && item.distanceKm ? ` · ${formatRunningPace(item.runTimeSeconds, item.distanceKm)}` : ''}</span>
+        {item.exercises?.map((exercise) => <div className="activity-exercise" key={exercise.id}><b>{exercise.name}</b><span>{exercise.sets.map((set) => `${set.reps} × ${set.loadKg === undefined ? 'kroppsvikt' : `${set.loadKg} kg`}${set.rpe ? ` · RPE ${set.rpe}` : ''}`).join('  |  ')}</span></div>)}
+        {item.notes && <p>{item.notes}</p>}
+      </div><button className="delete-action" aria-label={`Ta bort ${item.title}`} onClick={() => onDelete(item.id)}><Trash2 size={16}/></button>
+    </article>)}{visible.length === 0 && <div className="empty-card"><History size={22}/><b>Inga pass i loggen ännu</b><span>Registrera ett pass när du tränat. Planen ligger kvar separat.</span><button className="button-dark" onClick={onAdd}><Plus size={15}/> Lägg till pass</button></div>}</div>
   </section>;
 }
 
@@ -307,7 +333,59 @@ function TimePicker({ label, seconds, optional = false, onChange }: { label: str
 
 function ActivityModal({ draft, setDraft, onSubmit, onClose }: { draft: ActivityDraft; setDraft: (draft: ActivityDraft | null) => void; onSubmit: (event: FormEvent) => void; onClose: () => void }) {
   const change = <K extends keyof ActivityDraft>(key: K, value: ActivityDraft[K]) => setDraft({ ...draft, [key]: value });
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="modal" onSubmit={onSubmit}><div className="modal-heading"><div><div className="eyebrow">TRÄNINGSLOGG</div><h2>Registrera pass</h2></div><button type="button" className="icon-action" onClick={onClose} aria-label="Stäng"><X size={19}/></button></div><label>Namn på passet<input autoFocus maxLength={80} required value={draft.title} onChange={(event) => change('title', event.target.value)}/></label><div className="form-grid"><label>Träningstyp<select value={draft.type} onChange={(event) => change('type', event.target.value as ActivityType)}>{ACTIVITY_TYPES.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}</select></label><label>Datum<input type="date" value={draft.date} onChange={(event) => change('date', event.target.value)}/></label><label>Tid (min)<input type="number" min={1} max={1440} required value={draft.durationMinutes} onChange={(event) => change('durationMinutes', Number(event.target.value))}/></label><label>Ansträngning (1–10)<input type="number" min={1} max={10} value={draft.effort ?? 6} onChange={(event) => change('effort', Number(event.target.value))}/></label><label>Distans (km)<input type="number" min={0} step="0.1" value={draft.distanceKm ?? ''} onChange={(event) => change('distanceKm', event.target.value === '' ? undefined : Number(event.target.value))}/></label></div><label>Anteckning <span className="optional">(valfritt)</span><textarea rows={2} maxLength={400} value={draft.notes ?? ''} onChange={(event) => change('notes', event.target.value)}/></label><div className="modal-actions"><button type="button" className="button-outline" onClick={onClose}>Avbryt</button><button className="button-dark" type="submit"><Check size={16}/> Spara i loggen</button></div></form></div>;
+  const changeType = (type: ActivityType) => setDraft({
+    ...draft,
+    type,
+    exercises: type === 'strength' ? draft.exercises?.length ? draft.exercises : [{ id: createId(), name: '', sets: [{ reps: 0 }] }] : undefined,
+    runTimeSeconds: type === 'running' ? draft.runTimeSeconds : undefined,
+    distanceKm: type === 'running' ? draft.distanceKm : type === 'conditioning' ? draft.distanceKm : undefined,
+  });
+  const changeExercises = (exercises: ExerciseLog[]) => change('exercises', exercises);
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="modal" onSubmit={onSubmit}>
+      <div className="modal-heading"><div><div className="eyebrow">TRÄNINGSLOGG</div><h2>Registrera pass</h2></div><button type="button" className="icon-action" onClick={onClose} aria-label="Stäng"><X size={19}/></button></div>
+      <label>Namn på passet<input autoFocus maxLength={80} required value={draft.title} onChange={(event) => change('title', event.target.value)}/></label>
+      <div className="form-grid">
+        <label>Träningstyp<select value={draft.type} onChange={(event) => changeType(event.target.value as ActivityType)}>{ACTIVITY_TYPES.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}</select></label>
+        <label>Datum<input type="date" value={draft.date} onChange={(event) => change('date', event.target.value)}/></label>
+        {draft.type === 'running' ? <>
+          <TimePicker label="Tid (min:sek)" seconds={draft.runTimeSeconds} onChange={(runTimeSeconds) => setDraft({ ...draft, runTimeSeconds, durationMinutes: runTimeSeconds ? Math.max(1, Math.round(runTimeSeconds / 60)) : draft.durationMinutes })}/>
+          <label>Distans (km)<input type="number" min="0.01" step="0.01" required value={draft.distanceKm ?? ''} onChange={(event) => change('distanceKm', event.target.value === '' ? undefined : Number(event.target.value))}/></label>
+        </> : <>
+          <label>Tid (min)<input type="number" min={1} max={1440} required value={draft.durationMinutes} onChange={(event) => change('durationMinutes', Number(event.target.value))}/></label>
+          {draft.type === 'conditioning' && <label>Distans (km) <span className="optional">(valfritt)</span><input type="number" min={0} step="0.1" value={draft.distanceKm ?? ''} onChange={(event) => change('distanceKm', event.target.value === '' ? undefined : Number(event.target.value))}/></label>}
+        </>}
+        <label>Ansträngning (1–10) <span className="optional">(valfritt)</span><input type="number" min={1} max={10} value={draft.effort ?? ''} onChange={(event) => change('effort', event.target.value ? Number(event.target.value) : undefined)}/></label>
+      </div>
+      {draft.type === 'strength' && <ExerciseLogEditor exercises={draft.exercises ?? []} onChange={changeExercises}/>}
+      <label>Anteckning <span className="optional">(valfritt)</span><textarea rows={2} maxLength={400} value={draft.notes ?? ''} onChange={(event) => change('notes', event.target.value)}/></label>
+      <div className="modal-actions"><button type="button" className="button-outline" onClick={onClose}>Avbryt</button><button className="button-dark" type="submit"><Check size={16}/> Spara i loggen</button></div>
+    </form>
+  </div>;
+}
+
+function ExerciseLogEditor({ exercises, onChange }: { exercises: ExerciseLog[]; onChange: (exercises: ExerciseLog[]) => void }) {
+  const updateExercise = (exerciseIndex: number, update: Partial<ExerciseLog>) => onChange(exercises.map((exercise, index) => index === exerciseIndex ? { ...exercise, ...update } : exercise));
+  const updateSet = (exerciseIndex: number, setIndex: number, update: Partial<ExerciseLog['sets'][number]>) => onChange(exercises.map((exercise, index) => index === exerciseIndex ? {
+    ...exercise, sets: exercise.sets.map((set, currentSet) => currentSet === setIndex ? { ...set, ...update } : set),
+  } : exercise));
+
+  return <section className="exercise-log-editor">
+    <div className="exercise-log-heading"><strong>Övningar och set</strong><button type="button" className="button-outline" onClick={() => onChange([...exercises, { id: createId(), name: '', sets: [{ reps: 0 }] }])}><Plus size={14}/> Övning</button></div>
+    {exercises.map((exercise, exerciseIndex) => <article className="exercise-log-card" key={exercise.id}>
+      <div className="exercise-log-name"><label>Övning<input required maxLength={80} placeholder="Till exempel knäböj" value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })}/></label><button type="button" className="delete-action" aria-label={`Ta bort övning ${exercise.name || exerciseIndex + 1}`} onClick={() => onChange(exercises.filter((_, index) => index !== exerciseIndex))}><Trash2 size={15}/></button></div>
+      <div className="exercise-set-heading"><span>Set</span><span>Reps</span><span>Vikt (kg)</span><span>RPE</span><span/></div>
+      {exercise.sets.map((set, setIndex) => <div className="exercise-set-row" key={setIndex}>
+        <span>{setIndex + 1}</span>
+        <input aria-label={`Repetitioner, ${exercise.name || 'övning'}, set ${setIndex + 1}`} type="number" min={1} max={100} required value={set.reps || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: Number(event.target.value) || 0 })}/>
+        <input aria-label={`Vikt i kilo, ${exercise.name || 'övning'}, set ${setIndex + 1}`} type="number" min={0} step="0.5" value={set.loadKg ?? ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { loadKg: event.target.value === '' ? undefined : Number(event.target.value) })}/>
+        <select aria-label={`RPE, ${exercise.name || 'övning'}, set ${setIndex + 1}`} value={set.rpe ?? ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { rpe: event.target.value ? Number(event.target.value) : undefined })}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => <option value={index + 1} key={index + 1}>{index + 1}</option>)}</select>
+        <button type="button" className="delete-action" aria-label={`Ta bort set ${setIndex + 1}`} onClick={() => updateExercise(exerciseIndex, { sets: exercise.sets.filter((_, index) => index !== setIndex) })}><X size={14}/></button>
+      </div>)}
+      <button type="button" className="add-set-button" onClick={() => updateExercise(exerciseIndex, { sets: [...exercise.sets, { reps: 0 }] })}><Plus size={13}/> Lägg till set</button>
+    </article>)}
+  </section>;
 }
 
 function PlanModal({ session, defaultDay = 0, onSubmit, onClose, onDelete }: { session?: PlannedSession; defaultDay?: number; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void; onDelete?: () => void }) {
